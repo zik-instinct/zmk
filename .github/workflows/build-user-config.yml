@@ -23,6 +23,10 @@ on:
         default: "firmware"
         required: false
         type: string
+    secrets:
+      GACTYL_UPDATE_PSK_HEX:
+        description: "Optional Gactyl device update key (64 hex chars). Generated into a header, never logged or archived."
+        required: false
 
 jobs:
   matrix:
@@ -89,6 +93,21 @@ jobs:
             mkdir "${{ env.base_dir }}/${{ inputs.config_path }}"
             cp -R ${{ inputs.config_path }}/* "${{ env.base_dir }}/${{ inputs.config_path }}/"
           fi
+
+      - name: Gactyl device key header (optional)
+        env:
+          GACTYL_UPDATE_PSK_HEX: ${{ secrets.GACTYL_UPDATE_PSK_HEX }}
+          KEY_DIR: ${{ env.base_dir }}/.gactyl-key
+        run: |
+          set -eu
+          if [ -z "${GACTYL_UPDATE_PSK_HEX:-}" ]; then
+            echo "Gactyl device key: not provided, building without update auth"
+            exit 0
+          fi
+          mkdir -p "${KEY_DIR}"
+          python3 -c "import os;raw=bytes.fromhex(os.environ['GACTYL_UPDATE_PSK_HEX'].strip());assert len(raw)==32,'device key must be 32 bytes';open(os.path.join(os.environ['KEY_DIR'],'gactyl_device_key.h'),'w').write('#pragma once\n#define GACTYL_HAS_DEVICE_KEY 1\n#define GACTYL_DEVICE_KEY { '+','.join(str(b) for b in raw)+' }\n')"
+          echo "extra_cmake_args=${extra_cmake_args} -DGACTYL_KEY_DIR=\"${KEY_DIR}\"" >> $GITHUB_ENV
+          echo "Gactyl device key: header generated (contents not logged)"
 
       - name: Cache west modules
         uses: actions/cache@v4
@@ -165,6 +184,10 @@ jobs:
         with:
           name: artifact-${{ env.artifact_name }}
           path: ${{ env.build_dir }}/artifacts
+
+      - name: Remove device key header
+        if: ${{ always() }}
+        run: rm -rf "${{ env.base_dir }}/.gactyl-key"
 
   merge:
     runs-on: ubuntu-latest
