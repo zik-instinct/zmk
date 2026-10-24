@@ -81,6 +81,8 @@ struct behavior_hold_tap_data {
 // this data is specific for each hold-tap
 struct active_hold_tap {
     int32_t position;
+    // Gactyl: behavior device, reported to the decision hook.
+    const struct device *gactyl_dev;
 #if IS_ENABLED(CONFIG_ZMK_SPLIT)
     uint8_t source;
 #endif
@@ -541,8 +543,9 @@ static void decide_positional_hold(struct active_hold_tap *hold_tap) {
 // Gactyl recorder hook: weak no-op, overridden by the gactyl module. Fires
 // once per hold-tap decision with the original press timestamp. Retro-tap
 // flips after this point are counted as hold (documented).
-__weak void zmk_gactyl_on_holdtap_decision(int32_t position, bool decided_hold,
-                                           int64_t press_timestamp, int64_t decision_timestamp) {}
+__weak void zmk_gactyl_on_holdtap_decision(const struct device *dev, int32_t position,
+                                           bool decided_hold, int64_t press_timestamp,
+                                           int64_t decision_timestamp) {}
 
 static void decide_hold_tap(struct active_hold_tap *hold_tap,
                             enum decision_moment decision_moment) {
@@ -584,7 +587,8 @@ static void decide_hold_tap(struct active_hold_tap *hold_tap,
     decide_positional_hold(hold_tap);
 
     if (hold_tap->position != ZMK_BHV_HOLD_TAP_POSITION_NOT_USED) {
-        zmk_gactyl_on_holdtap_decision(hold_tap->position, hold_tap->status != STATUS_TAP,
+        zmk_gactyl_on_holdtap_decision(hold_tap->gactyl_dev, hold_tap->position,
+                                       hold_tap->status != STATUS_TAP,
                                        hold_tap->timestamp, k_uptime_get());
     }
 
@@ -649,6 +653,7 @@ static int on_hold_tap_binding_pressed(struct zmk_behavior_binding *binding,
     }
 
     LOG_DBG("%d new undecided hold_tap", event.position);
+    hold_tap->gactyl_dev = dev;
     undecided_hold_tap = hold_tap;
 
     if (is_quick_tap(hold_tap)) {
