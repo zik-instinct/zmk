@@ -115,6 +115,18 @@ jobs:
           echo "extra_cmake_args=${extra_cmake_args} -DGACTYL_KEY_DIR=\"${KEY_DIR}\"" >> $GITHUB_ENV
           echo "Gactyl device key: header generated (contents not logged)"
 
+      - name: Gactyl source build identity (both halves)
+        if: ${{ matrix.shield == 'cosmos_left' || matrix.shield == 'cosmos_right' }}
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+          SOURCE_RUN: ${{ github.run_number }}
+          INFO_DIR: ${{ env.base_dir }}/.gactyl-info
+        run: |
+          set -eu
+          mkdir -p "${INFO_DIR}"
+          python3 -c 'import os,re,datetime;sha=os.environ["SOURCE_SHA"];run=int(os.environ["SOURCE_RUN"]);assert re.fullmatch("[0-9a-f]{40}",sha) and 0<run<2**32;time=datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ");open(os.path.join(os.environ["INFO_DIR"],"gactyl_build_info.h"),"w").write("#pragma once\n#define GACTYL_BUILD_SHA \""+sha+"\"\n#define GACTYL_BUILD_TIME \""+time+"\"\n#define GACTYL_BUILD_RUN "+str(run)+"u\n")'
+          echo "extra_cmake_args=${extra_cmake_args} -DGACTYL_BUILD_INFO_DIR=\"${INFO_DIR}\"" >> $GITHUB_ENV
+
       - name: Cache west modules
         uses: actions/cache@v4
         continue-on-error: true
