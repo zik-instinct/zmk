@@ -68,6 +68,11 @@ struct behavior_hold_tap_config {
 };
 
 struct behavior_hold_tap_data {
+    // Gactyl: runtime-adjustable timings, copied from DT config at init.
+    // DT config remains the compiled-in default and reset target.
+    int32_t rt_tapping_term_ms;
+    int32_t rt_require_prior_idle_ms;
+    int32_t rt_quick_tap_ms;
 #if IS_ENABLED(CONFIG_ZMK_BEHAVIOR_METADATA)
     struct behavior_parameter_metadata_set set;
 #endif // IS_ENABLED(CONFIG_ZMK_BEHAVIOR_METADATA)
@@ -84,6 +89,10 @@ struct active_hold_tap {
     int64_t timestamp;
     enum status status;
     const struct behavior_hold_tap_config *config;
+    // Gactyl: per-press snapshot of the runtime timings (future presses only).
+    int32_t rt_tapping_term_ms;
+    int32_t rt_require_prior_idle_ms;
+    int32_t rt_quick_tap_ms;
     struct k_work_delayable work;
     bool work_is_cancelled;
 
@@ -142,11 +151,11 @@ static void store_last_hold_tapped(struct active_hold_tap *hold_tap) {
 }
 
 static bool is_quick_tap(struct active_hold_tap *hold_tap) {
-    if ((last_tapped.timestamp + hold_tap->config->require_prior_idle_ms) > hold_tap->timestamp) {
+    if ((last_tapped.timestamp + hold_tap->rt_require_prior_idle_ms) > hold_tap->timestamp) {
         return true;
     } else {
         return (last_tapped.position == hold_tap->position) &&
-               (last_tapped.timestamp + hold_tap->config->quick_tap_ms) > hold_tap->timestamp;
+               (last_tapped.timestamp + hold_tap->rt_quick_tap_ms) > hold_tap->timestamp;
     }
 }
 
@@ -254,7 +263,8 @@ static struct active_hold_tap *find_hold_tap(uint32_t position) {
 
 static struct active_hold_tap *store_hold_tap(struct zmk_behavior_binding_event *event,
                                               uint32_t param_hold, uint32_t param_tap,
-                                              const struct behavior_hold_tap_config *config) {
+                                              const struct behavior_hold_tap_config *config,
+                                              const struct behavior_hold_tap_data *bhv_data) {
     for (int i = 0; i < ZMK_BHV_HOLD_TAP_MAX_HELD; i++) {
         if (active_hold_taps[i].position != ZMK_BHV_HOLD_TAP_POSITION_NOT_USED) {
             continue;
@@ -265,6 +275,9 @@ static struct active_hold_tap *store_hold_tap(struct zmk_behavior_binding_event 
 #endif
         active_hold_taps[i].status = STATUS_UNDECIDED;
         active_hold_taps[i].config = config;
+        active_hold_taps[i].rt_tapping_term_ms = bhv_data->rt_tapping_term_ms;
+        active_hold_taps[i].rt_require_prior_idle_ms = bhv_data->rt_require_prior_idle_ms;
+        active_hold_taps[i].rt_quick_tap_ms = bhv_data->rt_quick_tap_ms;
         active_hold_taps[i].param_hold = param_hold;
         active_hold_taps[i].param_tap = param_tap;
         active_hold_taps[i].timestamp = event->timestamp;
@@ -614,8 +627,9 @@ static int on_hold_tap_binding_pressed(struct zmk_behavior_binding *binding,
         return ZMK_BEHAVIOR_OPAQUE;
     }
 
+    struct behavior_hold_tap_data *bhv_data = dev->data;
     struct active_hold_tap *hold_tap =
-        store_hold_tap(&event, binding->param1, binding->param2, cfg);
+        store_hold_tap(&event, binding->param1, binding->param2, cfg, bhv_data);
 
     if (hold_tap == NULL) {
         LOG_ERR("unable to store hold-tap info, did you press more than %d hold-taps?",
@@ -634,7 +648,7 @@ static int on_hold_tap_binding_pressed(struct zmk_behavior_binding *binding,
 
     // if this behavior was queued we have to adjust the timer to only
     // wait for the remaining time.
-    int32_t tapping_term_ms_left = (hold_tap->timestamp + cfg->tapping_term_ms) - k_uptime_get();
+    int32_t tapping_term_ms_left = (hold_tap->timestamp + hold_tap->rt_tapping_term_ms) - k_uptime_get();
     k_work_schedule(&hold_tap->work, K_MSEC(tapping_term_ms_left));
 
     return ZMK_BEHAVIOR_OPAQUE;
@@ -651,7 +665,7 @@ static int on_hold_tap_binding_released(struct zmk_behavior_binding *binding,
     // If these events were queued, the timer event may be queued too late or not at all.
     // We insert a timer event before the TH_KEY_UP event to verify.
     int work_cancel_result = k_work_cancel_delayable(&hold_tap->work);
-    if (event.timestamp > (hold_tap->timestamp + hold_tap->config->tapping_term_ms)) {
+    if (event.timestamp > (hold_tap->timestamp + hold_tap->rt_tapping_term_ms)) {
         decide_hold_tap(hold_tap, HT_TIMER_EVENT);
     }
 
@@ -758,7 +772,7 @@ static int position_state_changed_listener(const zmk_event_t *eh) {
     // We make a timer decision before the other key events are handled if the timer would
     // have run out.
     if (ev->timestamp >
-        (undecided_hold_tap->timestamp + undecided_hold_tap->config->tapping_term_ms)) {
+        (undecided_hold_tap->timestamp + undecided_hold_tap->rt_tapping_term_ms)) {
         decide_hold_tap(undecided_hold_tap, HT_TIMER_EVENT);
     }
 
@@ -845,6 +859,12 @@ void behavior_hold_tap_timer_work_handler(struct k_work *item) {
 }
 
 static int behavior_hold_tap_init(const struct device *dev) {
+    const struct behavior_hold_tap_config *cfg = dev->config;
+    struct behavior_hold_tap_data *data = dev->data;
+    data->rt_tapping_term_ms = cfg->tapping_term_ms;
+    data->rt_require_prior_idle_ms = cfg->require_prior_idle_ms;
+    data->rt_quick_tap_ms = cfg->quick_tap_ms;
+
     static bool init_first_run = true;
 
     if (init_first_run) {
@@ -880,5 +900,29 @@ static int behavior_hold_tap_init(const struct device *dev) {
                             CONFIG_KERNEL_INIT_PRIORITY_DEFAULT, &behavior_hold_tap_driver_api);
 
 DT_INST_FOREACH_STATUS_OKAY(KP_INST)
+
+// Gactyl runtime timings API. set affects FUTURE presses only (each press
+// snapshots the values into its active_hold_tap); get reads back live values.
+void zmk_behavior_hold_tap_get_timings(const struct device *dev, int32_t *tapping_term_ms,
+                                       int32_t *require_prior_idle_ms, int32_t *quick_tap_ms) {
+    const struct behavior_hold_tap_data *data = dev->data;
+    if (tapping_term_ms != NULL) {
+        *tapping_term_ms = data->rt_tapping_term_ms;
+    }
+    if (require_prior_idle_ms != NULL) {
+        *require_prior_idle_ms = data->rt_require_prior_idle_ms;
+    }
+    if (quick_tap_ms != NULL) {
+        *quick_tap_ms = data->rt_quick_tap_ms;
+    }
+}
+
+void zmk_behavior_hold_tap_set_timings(const struct device *dev, int32_t tapping_term_ms,
+                                       int32_t require_prior_idle_ms, int32_t quick_tap_ms) {
+    struct behavior_hold_tap_data *data = dev->data;
+    data->rt_tapping_term_ms = tapping_term_ms;
+    data->rt_require_prior_idle_ms = require_prior_idle_ms;
+    data->rt_quick_tap_ms = quick_tap_ms;
+}
 
 #endif /* DT_HAS_COMPAT_STATUS_OKAY(DT_DRV_COMPAT) */
