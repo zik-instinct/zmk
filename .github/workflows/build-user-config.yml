@@ -147,8 +147,13 @@ jobs:
 
       - name: West Build (${{ env.display_name }})
         working-directory: ${{ env.base_dir }}
-        shell: sh -x {0}
-        run: west build -s zmk/app -d "${{ env.build_dir }}" -b "${{ matrix.board }}" ${{ env.extra_west_args }} -- -DZMK_CONFIG=${{ env.base_dir }}/${{ inputs.config_path }} ${{ env.extra_cmake_args }} ${{ matrix.cmake-args }}
+        shell: bash
+        run: |
+          set -eo pipefail
+          west build -s zmk/app -d "${{ env.build_dir }}" -b "${{ matrix.board }}" ${{ env.extra_west_args }} -- -DZMK_CONFIG=${{ env.base_dir }}/${{ inputs.config_path }} ${{ env.extra_cmake_args }} ${{ matrix.cmake-args }} 2>&1 | tee "${{ env.build_dir }}/gactyl-build.log"
+          if [ -f "${GITHUB_WORKSPACE}/scripts/report_build_memory.py" ]; then
+            python3 "${GITHUB_WORKSPACE}/scripts/report_build_memory.py" "${{ env.build_dir }}/gactyl-build.log" "${{ env.build_dir }}/memory.json"
+          fi
 
       - name: ${{ env.display_name }} Kconfig file
         run: |
@@ -177,6 +182,9 @@ jobs:
         shell: sh -x {0}
         run: |
           mkdir "${{ env.build_dir }}/artifacts"
+          if [ -f "${{ env.build_dir }}/memory.json" ]; then
+            cp "${{ env.build_dir }}/memory.json" "${{ env.build_dir }}/artifacts/${{ env.artifact_name }}.memory.json"
+          fi
           if [ -f "${{ env.build_dir }}/zephyr/zmk.uf2" ]
           then
             cp "${{ env.build_dir }}/zephyr/zmk.uf2" "${{ env.build_dir }}/artifacts/${{ env.artifact_name }}.uf2"
