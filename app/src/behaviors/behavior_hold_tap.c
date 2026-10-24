@@ -538,6 +538,12 @@ static void decide_positional_hold(struct active_hold_tap *hold_tap) {
     hold_tap->status = STATUS_TAP;
 }
 
+// Gactyl recorder hook: weak no-op, overridden by the gactyl module. Fires
+// once per hold-tap decision with the original press timestamp. Retro-tap
+// flips after this point are counted as hold (documented).
+__weak void zmk_gactyl_on_holdtap_decision(int32_t position, bool decided_hold,
+                                           int64_t press_timestamp, int64_t decision_timestamp) {}
+
 static void decide_hold_tap(struct active_hold_tap *hold_tap,
                             enum decision_moment decision_moment) {
     if (hold_tap->status != STATUS_UNDECIDED) {
@@ -576,6 +582,11 @@ static void decide_hold_tap(struct active_hold_tap *hold_tap,
     }
 
     decide_positional_hold(hold_tap);
+
+    if (hold_tap->position != ZMK_BHV_HOLD_TAP_POSITION_NOT_USED) {
+        zmk_gactyl_on_holdtap_decision(hold_tap->position, hold_tap->status != STATUS_TAP,
+                                       hold_tap->timestamp, k_uptime_get());
+    }
 
     // Since the hold-tap has been decided, clean up undecided_hold_tap and
     // execute the decided behavior.
