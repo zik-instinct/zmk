@@ -23,6 +23,11 @@ on:
         default: "firmware"
         required: false
         type: string
+      gactyl_key_shield:
+        description: "Shield name of the central half that alone receives the Gactyl device key header (empty = no job receives it)"
+        default: "cosmos_left"
+        required: false
+        type: string
     secrets:
       GACTYL_UPDATE_PSK_HEX:
         description: "Optional Gactyl device update key (64 hex chars). Generated into a header, never logged or archived."
@@ -94,7 +99,8 @@ jobs:
             cp -R ${{ inputs.config_path }}/* "${{ env.base_dir }}/${{ inputs.config_path }}/"
           fi
 
-      - name: Gactyl device key header (optional)
+      - name: Gactyl device key header (optional, central shield only)
+        if: ${{ matrix.shield == inputs.gactyl_key_shield && inputs.gactyl_key_shield != '' }}
         env:
           GACTYL_UPDATE_PSK_HEX: ${{ secrets.GACTYL_UPDATE_PSK_HEX }}
           KEY_DIR: ${{ env.base_dir }}/.gactyl-key
