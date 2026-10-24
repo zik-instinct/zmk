@@ -44,6 +44,27 @@ static bool encode_device_info_serial_number(pb_ostream_t *stream, const pb_fiel
 
 #endif // IS_ENABLED(CONFIG_HWINFO)
 
+#if IS_ENABLED(CONFIG_GACTYL)
+static bool encode_gactyl_ext_name(pb_ostream_t *stream, const pb_field_t *field,
+                                   void *const *arg) {
+    if (!pb_encode_tag_for_field(stream, field)) {
+        return false;
+    }
+    return pb_encode_string(stream, "gactyl", 6);
+}
+
+static bool encode_device_info_extensions(pb_ostream_t *stream, const pb_field_t *field,
+                                          void *const *arg) {
+    zmk_core_ExtensionInfo ext = zmk_core_ExtensionInfo_init_zero;
+    ext.name.funcs.encode = encode_gactyl_ext_name;
+    ext.version = 1;
+    if (!pb_encode_tag_for_field(stream, field)) {
+        return false;
+    }
+    return pb_encode_submessage(stream, &zmk_core_ExtensionInfo_msg, &ext);
+}
+#endif // IS_ENABLED(CONFIG_GACTYL)
+
 zmk_studio_Response get_device_info(const zmk_studio_Request *req) {
     LOG_DBG("");
     zmk_core_GetDeviceInfoResponse resp = zmk_core_GetDeviceInfoResponse_init_zero;
@@ -52,6 +73,9 @@ zmk_studio_Response get_device_info(const zmk_studio_Request *req) {
 #if IS_ENABLED(CONFIG_HWINFO)
     resp.serial_number.funcs.encode = encode_device_info_serial_number;
 #endif // IS_ENABLED(CONFIG_HWINFO)
+#if IS_ENABLED(CONFIG_GACTYL)
+    resp.extensions.funcs.encode = encode_device_info_extensions;
+#endif // IS_ENABLED(CONFIG_GACTYL)
 
     return CORE_RESPONSE(get_device_info, resp);
 }
