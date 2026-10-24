@@ -4,6 +4,8 @@ manifest:
       url-base: https://github.com/zephyrproject-rtos
     - name: zmkfirmware
       url-base: https://github.com/zmkfirmware
+    - name: zik-instinct
+      url-base: https://github.com/zik-instinct
   projects:
     - name: zephyr
       remote: zmkfirmware
@@ -34,8 +36,8 @@ manifest:
       path: modules/lib/nanopb
       remote: zmkfirmware
     - name: zmk-studio-messages
-      revision: 6cb4c283e76209d59c45fbcb218800cd19e9339d
+      revision: eaa9447b4678f4c976d277acf076f40592b9f143
       path: modules/msgs/zmk-studio-messages
-      remote: zmkfirmware
+      remote: zik-instinct
   self:
     west-commands: scripts/west-commands.yml
