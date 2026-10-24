@@ -10,6 +10,14 @@
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 #include <zmk/event_manager.h>
+#include <zmk/events/position_state_changed.h>
+
+// Gactyl recorder ingress hook: weak no-op, overridden by the gactyl module.
+// Called exactly once per original position event (local or split-peripheral),
+// before any listener (including hold-tap capture). Replayed events re-raised
+// via raise_at/raise_after do NOT pass through here.
+__weak void zmk_gactyl_on_position_event(uint8_t source, uint32_t position, bool state,
+                                         int64_t timestamp) {}
 
 extern struct zmk_event_type *__event_type_start[];
 extern struct zmk_event_type *__event_type_end[];
@@ -45,7 +53,15 @@ int zmk_event_manager_handle_from(zmk_event_t *event, uint8_t start_index) {
     return 0;
 }
 
-int zmk_event_manager_raise(zmk_event_t *event) { return zmk_event_manager_handle_from(event, 0); }
+int zmk_event_manager_raise(zmk_event_t *event) {
+    if (event->event == &zmk_event_zmk_position_state_changed) {
+        struct zmk_position_state_changed *ev = as_zmk_position_state_changed(event);
+        if (ev != NULL) {
+            zmk_gactyl_on_position_event(ev->source, ev->position, ev->state, ev->timestamp);
+        }
+    }
+    return zmk_event_manager_handle_from(event, 0);
+}
 
 int zmk_event_manager_raise_after(zmk_event_t *event, const struct zmk_listener *listener) {
     uint8_t len = __event_subscriptions_end - __event_subscriptions_start;
