@@ -49,3 +49,9 @@ properties:
     default: []
   hold-trigger-on-release:
     type: boolean
+  same-hand-tap-after-term:
+    type: boolean
+    description: |
+      Gactyl extension. If a hold was decided only because the tapping term expired, and the
+      first key pressed afterwards is NOT in hold-trigger-key-positions, release the hold and
+      treat the hold-tap as a tap. A trigger-position key keeps the hold.

@@ -63,6 +63,7 @@ struct behavior_hold_tap_config {
     bool hold_while_undecided_linger;
     bool retro_tap;
     bool hold_trigger_on_release;
+    bool same_hand_tap_after_term; // Gactyl: see position_state_changed_listener
     int32_t hold_trigger_key_positions_len;
     int32_t hold_trigger_key_positions[];
 };
@@ -100,6 +101,7 @@ struct active_hold_tap {
 
     // initialized to -1, which is to be interpreted as "no other key has been pressed yet"
     int32_t position_of_first_other_key_pressed;
+    bool after_term_other_key_seen; // Gactyl: first key after a timer-decided hold was handled
 };
 
 // The undecided hold tap is the hold tap that needs to be decided before
@@ -284,6 +286,7 @@ static struct active_hold_tap *store_hold_tap(struct zmk_behavior_binding_event 
         active_hold_taps[i].param_tap = param_tap;
         active_hold_taps[i].timestamp = event->timestamp;
         active_hold_taps[i].position_of_first_other_key_pressed = -1;
+        active_hold_taps[i].after_term_other_key_seen = false;
         return &active_hold_taps[i];
     }
     return NULL;
@@ -754,8 +757,42 @@ static const struct behavior_driver_api behavior_hold_tap_driver_api = {
 #endif // IS_ENABLED(CONFIG_ZMK_BEHAVIOR_METADATA)
 };
 
+static bool is_trigger_position(const struct behavior_hold_tap_config *cfg, uint32_t position) {
+    for (int i = 0; i < cfg->hold_trigger_key_positions_len; i++) {
+        if ((uint32_t)cfg->hold_trigger_key_positions[i] == position) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Gactyl: a hold decided purely by the timer (nothing else pressed) is turned back into a tap
+// when the FIRST key pressed afterwards is not a hold-trigger (same hand) key. A trigger
+// (opposite hand) key keeps the hold, so long-hold + opposite-hand shortcuts still work.
+static void revert_timer_holds_for_same_hand_key(uint32_t position) {
+    for (int i = 0; i < ZMK_BHV_HOLD_TAP_MAX_HELD; i++) {
+        struct active_hold_tap *ht = &active_hold_taps[i];
+        if (ht->position == ZMK_BHV_HOLD_TAP_POSITION_NOT_USED || ht->position == position ||
+            ht->status != STATUS_HOLD_TIMER || ht->after_term_other_key_seen ||
+            !ht->config->same_hand_tap_after_term) {
+            continue;
+        }
+        ht->after_term_other_key_seen = true;
+        if (is_trigger_position(ht->config, position)) {
+            continue;
+        }
+        release_hold_binding(ht);
+        ht->status = STATUS_TAP;
+        press_tap_binding(ht);
+    }
+}
+
 static int position_state_changed_listener(const zmk_event_t *eh) {
     struct zmk_position_state_changed *ev = as_zmk_position_state_changed(eh);
+
+    if (ev->state) {
+        revert_timer_holds_for_same_hand_key(ev->position);
+    }
 
     update_hold_status_for_retro_tap(ev->position);
 
@@ -907,6 +944,7 @@ static int behavior_hold_tap_init(const struct device *dev) {
         .hold_while_undecided_linger = DT_INST_PROP(n, hold_while_undecided_linger),               \
         .retro_tap = DT_INST_PROP(n, retro_tap),                                                   \
         .hold_trigger_on_release = DT_INST_PROP(n, hold_trigger_on_release),                       \
+        .same_hand_tap_after_term = DT_INST_PROP(n, same_hand_tap_after_term),                     \
         .hold_trigger_key_positions = DT_INST_PROP(n, hold_trigger_key_positions),                 \
         .hold_trigger_key_positions_len = DT_INST_PROP_LEN(n, hold_trigger_key_positions),         \
     };                                                                                             \
