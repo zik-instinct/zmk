@@ -12,6 +12,7 @@
 #include <dt-bindings/zmk/keys.h>
 #include <zephyr/logging/log.h>
 #include <zmk/behavior.h>
+#include <zmk/hrm_off.h>
 #include <zmk/matrix.h>
 #include <zmk/endpoints.h>
 #include <zmk/event_manager.h>
@@ -659,7 +660,7 @@ static int on_hold_tap_binding_pressed(struct zmk_behavior_binding *binding,
     hold_tap->gactyl_dev = dev;
     undecided_hold_tap = hold_tap;
 
-    if (is_quick_tap(hold_tap)) {
+    if (zmk_hrm_off() || is_quick_tap(hold_tap)) {
         decide_hold_tap(hold_tap, HT_QUICK_TAP);
     }
 

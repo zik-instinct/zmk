@@ -1,0 +1,9 @@
+/ {
+    behaviors {
+        hrm_toggle: hrm_toggle {
+            compatible = "zmk,behavior-hrm-toggle";
+            #binding-cells = <0>;
+            display-name = "HRM Toggle";
+        };
+    };
+};
