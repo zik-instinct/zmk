@@ -12,8 +12,12 @@ jobs:
       - run: west init -l app
       - run: west update --fetch-opt=--filter=tree:0
       - run: west zephyr-export
-      - name: Run timeline tests (failures expected until snapshots are accepted)
+      - name: Upstream hold-tap regression tests (patch must not change them)
+        working-directory: app
+        run: west test tests/hold-tap/balanced tests/hold-tap/tap-preferred tests/hold-tap/hold-preferred tests/hold-tap/tap-unless-interrupted tests/hold-tap/hold-while-undecided 2>&1 | tail -15
+      - name: Gactyl timeline tests
         working-directory: app
         run: |
-          west test tests/hold-tap/gactyl-hrm || true
-          for d in build/tests/hold-tap/gactyl-hrm/*/*; do echo "=== $d"; cat $d/keycode_events.log; done
+          west test tests/hold-tap/gactyl-hrm > /tmp/hrm.out 2>&1 || true
+          grep -E "^(PASS|FAILED)" /tmp/hrm.out | sort | uniq -c | sort -rn | head -3
+          for d in build/tests/hold-tap/gactyl-hrm/*/*; do echo "=== ${d#build/tests/hold-tap/gactyl-hrm/}"; grep -v "^ht_binding_released" $d/keycode_events.log | sed 's/usage_page 0x07 //; s/ implicit_mods 0x00 explicit_mods 0x00//'; done
