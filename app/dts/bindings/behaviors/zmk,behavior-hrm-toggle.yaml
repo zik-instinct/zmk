@@ -1,0 +1,5 @@
+description: Toggle the persisted global "home-row mods off" flag checked by hold-tap behaviors that set hrm-off-aware
+
+compatible: "zmk,behavior-hrm-toggle"
+
+include: zero_param.yaml
