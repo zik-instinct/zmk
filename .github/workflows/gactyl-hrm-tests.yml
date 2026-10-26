@@ -1,7 +1,7 @@
 name: Gactyl HRM timeline tests
 on:
   push:
-    branches: [hrm-timeline-tests]
+    branches: [hrm-timeline-tests, hrm-toggle-tests]
 jobs:
   hrm:
     runs-on: ubuntu-latest
