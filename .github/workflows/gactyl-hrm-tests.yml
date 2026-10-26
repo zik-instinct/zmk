@@ -1,0 +1,19 @@
+name: Gactyl HRM timeline tests
+on:
+  push:
+    branches: [hrm-timeline-tests]
+jobs:
+  hrm:
+    runs-on: ubuntu-latest
+    container:
+      image: docker.io/zmkfirmware/zmk-build-arm:3.5
+    steps:
+      - uses: actions/checkout@v4
+      - run: west init -l app
+      - run: west update --fetch-opt=--filter=tree:0
+      - run: west zephyr-export
+      - name: Run timeline tests (failures expected until snapshots are accepted)
+        working-directory: app
+        run: |
+          west test tests/hold-tap/gactyl-hrm || true
+          for d in build/tests/hold-tap/gactyl-hrm/*/*; do echo "=== $d"; cat $d/keycode_events.log; done
