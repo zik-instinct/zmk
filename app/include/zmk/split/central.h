@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <stdbool.h>
 #include <zephyr/bluetooth/addr.h>
 #include <zmk/behavior.h>
 
@@ -27,6 +28,16 @@
 #endif
 
 #define ZMK_SPLIT_CENTRAL_PERIPHERAL_COUNT MAX(BLE_PERIPHERAL_COUNT, WIRED_PERIPHERAL_COUNT)
+
+
+#if IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
+
+/* Live per-peripheral link state, read from the active split transport.
+ * Returns true only while the given source slot currently holds a connected
+ * peripheral. Never cached: callers may poll it at any time. */
+bool zmk_split_central_peripheral_is_connected(uint8_t source);
+
+#endif // IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
 
 #if IS_ENABLED(CONFIG_ZMK_SPLIT_PERIPHERAL_HID_INDICATORS)
 #include <zmk/hid_indicators_types.h>

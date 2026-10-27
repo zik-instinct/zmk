@@ -163,6 +163,27 @@ int zmk_split_central_get_peripheral_battery_level(uint8_t source, uint8_t *leve
 
 #endif // IS_ENABLED(CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING)
 
+
+bool zmk_split_central_peripheral_is_connected(uint8_t source) {
+    if (!active_transport || !active_transport->api ||
+        !active_transport->api->get_available_source_ids) {
+        return false;
+    }
+
+    uint8_t source_ids[ZMK_SPLIT_CENTRAL_PERIPHERAL_COUNT] = {0};
+    int count = active_transport->api->get_available_source_ids(source_ids);
+    if (count < 0) {
+        return false;
+    }
+
+    for (int i = 0; i < count; i++) {
+        if (source_ids[i] == source) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static int select_first_available_transport(void) {
     // Transports are sorted by priority, so find the first
     // One that's available, and enable it. Any transport that
